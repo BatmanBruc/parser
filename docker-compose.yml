@@ -1,0 +1,48 @@
+services:
+  parser:
+    build: .
+    container_name: parser
+    environment:
+    depends_on:
+      mongo:
+        condition: healthcheck
+    networks:
+      - parser-network
+
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh mongodb://admin:example_password@localhost:27017/admin?authSource=admin --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - parser-network
+
+volumes:
+  postgres_data:
+
+networks:
+  parser-network:
+    driver: bridge

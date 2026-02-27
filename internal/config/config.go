@@ -3,13 +3,11 @@ package config
 import (
 	"log"
 	"os"
-	"path/filepath"
-	"runtime"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
-// Config представляет структуру конфигурации.
 type Config struct {
 	MongoURI       string
 	RabbitMQURI    string
@@ -18,24 +16,16 @@ type Config struct {
 	QueueName      string
 }
 
-// getProjectRoot возвращает абсолютный путь к корневой директории проекта.
-func getProjectRoot() string {
-	// Получаем путь к текущему файлу (config.go)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		log.Fatal("Ошибка получения пути к текущему файлу")
-	}
-	// Переходим на три уровня вверх (config -> go_parser)
-	projectRoot := filepath.Dir(filepath.Dir(filename))
-	return projectRoot
-}
-
-// LoadConfig загружает конфигурацию из файла .env в корне проекта.
 func LoadConfig() *Config {
-	return LoadConfigFromFile(filepath.Join(getProjectRoot(), "./../.env"))
+	return &Config{
+		MongoURI:       GetEnv("MONGO_URI", "mongodb://localhost:27017"),
+		RabbitMQURI:    GetEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		DatabaseName:   GetEnv("DATABASE_NAME", "parser"),
+		CollectionName: GetEnv("COLLECTION_NAME", "tasks"),
+		QueueName:      GetEnv("QUEUE_NAME", "parser_queue"),
+	}
 }
 
-// LoadConfigFromFile загружает конфигурацию из указанного файла .env.
 func LoadConfigFromFile(filename string) *Config {
 	err := godotenv.Load(filename)
 	if err != nil {
@@ -49,4 +39,29 @@ func LoadConfigFromFile(filename string) *Config {
 		CollectionName: os.Getenv("COLLECTION_NAME"),
 		QueueName:      os.Getenv("QUEUE_NAME"),
 	}
+}
+
+func GetEnv(key, def string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return def
+}
+
+func GetEnvAsInt(key string, defaultVal int) int {
+	if value := os.Getenv(key); value != "" {
+		if intVal, err := strconv.Atoi(value); err == nil {
+			return intVal
+		}
+	}
+	return defaultVal
+}
+
+func GetEnvAsBool(key string, defaultVal bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
+		}
+	}
+	return defaultVal
 }

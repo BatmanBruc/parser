@@ -7,34 +7,31 @@ import (
 	"syscall"
 
 	"go_parser/internal/config"
-	"go_parser/internal/handlers"
-	"go_parser/internal/services"
+	"go_parser/internal/database"
+	"go_parser/internal/domain/record"
+	"go_parser/internal/handler"
+	"go_parser/internal/parser/plans"
+	"go_parser/internal/queue"
 	"go_parser/internal/utils"
+	"go_parser/internal/worker"
 )
 
 func main() {
-	// Загрузка конфигурации
 	cfg := config.LoadConfig()
 	utils.Logger.Println("Конфигурация загружена.")
 
-	// Подключение к MongoDB
-	utils.Logger.Println("Подключение к MongoDB...")
-	mongoClient, err := services.ConnectToMongoDB(cfg.MongoURI)
-	if err != nil {
-		utils.Logger.Fatalf("Ошибка подключения к MongoDB: %v", err)
-	}
-	defer func() {
-		if err := mongoClient.Disconnect(context.Background()); err != nil {
-			utils.Logger.Printf("Ошибка отключения от MongoDB: %v", err)
-		} else {
-			utils.Logger.Println("Успешно отключено от MongoDB.")
-		}
-	}()
-	utils.Logger.Println("Успешно подключено к MongoDB.")
+	ctx := context.Background()
 
-	// Подключение к RabbitMQ
+	recordRepo := database.NewMongoRepository[*record.Record](
+		cfg.MongoURI,
+		"parser_db",
+		"records",
+	)
+
+	defer recordRepo.Close(ctx)
+
 	utils.Logger.Println("Подключение к RabbitMQ...")
-	rabbitMQConn, err := services.ConnectToRabbitMQ(cfg.RabbitMQURI)
+	rabbitMQConn, err := queue.ConnectToRabbitMQ(cfg.RabbitMQURI)
 	if err != nil {
 		utils.Logger.Fatalf("Ошибка подключения к RabbitMQ: %v", err)
 	}
@@ -47,7 +44,6 @@ func main() {
 	}()
 	utils.Logger.Println("Успешно подключено к RabbitMQ.")
 
-	// Создание канала RabbitMQ
 	utils.Logger.Println("Создание канала RabbitMQ...")
 	ch, err := rabbitMQConn.Channel()
 	if err != nil {
@@ -62,7 +58,6 @@ func main() {
 	}()
 	utils.Logger.Println("Канал RabbitMQ успешно создан.")
 
-	// Объявление очереди
 	utils.Logger.Println("Объявление очереди...")
 	q, err := ch.QueueDeclare(
 		cfg.QueueName, // Имя очереди
@@ -93,36 +88,30 @@ func main() {
 	}
 	utils.Logger.Println("Успешно подписались на очередь.")
 
-	// Graceful shutdown
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	utils.Logger.Println("Ожидание сообщений. Для выхода нажмите CTRL+C.")
 
-	// Обработка сообщений
+	h := handler.NewHandler(recordRepo, ch, cfg.QueueName)
+	pr := plans.NewRegistr()
+	wp := worker.NewWorkerPool(3, pr, h)
+
 	go func() {
 		for msg := range msgs {
 			utils.Logger.Printf("Получено новое сообщение: %s\n", msg.Body)
-
-			// Обработка сообщения
-			ctx := context.Background()
-			err := handlers.ProcessMessage(ctx, msg.Body, mongoClient.Database(cfg.DatabaseName).Collection(cfg.CollectionName))
-			if err != nil {
-				utils.Logger.Printf("Ошибка обработки сообщения: %v\n", err)
-				continue
-			}
-
-			// Подтверждение сообщения
-			err = msg.Ack(false) // false = подтвердить только это сообщение
-			if err != nil {
-				utils.Logger.Printf("Ошибка подтверждения сообщения: %v\n", err)
-			} else {
-				utils.Logger.Println("Сообщение успешно обработано и подтверждено.")
-			}
+			wp.Msg <- queue.NewMessage(msg)
 		}
 	}()
 
-	// Ожидание сигнала завершения
-	<-sigs
-	utils.Logger.Println("Завершение работы...")
+	for {
+		select {
+		case result := <-wp.Result:
+			handler.HandleResult(result)
+		case <-sigs:
+			wp.Stop()
+			utils.Logger.Println("Завершение работы...")
+
+		}
+	}
 }

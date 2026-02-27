@@ -6,8 +6,7 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
-// FetchPageWithPlaywright открывает страницу через Playwright и возвращает её HTML-содержимое.
-func FetchPageWithPlaywright(url string) (string, error) {
+func GetFullPage(url string) (string, error) {
 	utils.Logger.Println("Запуск Playwright...")
 	pw, err := playwright.Run()
 	if err != nil {
@@ -18,7 +17,7 @@ func FetchPageWithPlaywright(url string) (string, error) {
 
 	utils.Logger.Println("Запуск headless-браузера...")
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), // Headless-режим
+		Headless: playwright.Bool(true),
 	})
 	if err != nil {
 		return "", err
@@ -40,7 +39,6 @@ func FetchPageWithPlaywright(url string) (string, error) {
 	}
 	utils.Logger.Println("Успешно перешли по URL.")
 
-	// Ожидание загрузки страницы
 	utils.Logger.Println("Ожидание загрузки страницы...")
 	err = page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
 		State: playwright.LoadStateNetworkidle,

@@ -103,15 +103,7 @@ func main() {
 			wp.Msg <- queue.NewMessage(msg)
 		}
 	}()
-
-	for {
-		select {
-		case result := <-wp.Result:
-			handler.HandleResult(result)
-		case <-sigs:
-			wp.Stop()
-			utils.Logger.Println("Завершение работы...")
-
-		}
-	}
+	<-sigs
+	ch.Close()
+	wp.Stop()
 }

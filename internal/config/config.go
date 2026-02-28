@@ -18,8 +18,8 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		MongoURI:       GetEnv("MONGO_URI", "mongodb://localhost:27017"),
-		RabbitMQURI:    GetEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		MongoURI:       GetEnv("MONGO_URI", "mongodb://mongo:27017/"),
+		RabbitMQURI:    GetEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
 		DatabaseName:   GetEnv("DATABASE_NAME", "parser"),
 		CollectionName: GetEnv("COLLECTION_NAME", "tasks"),
 		QueueName:      GetEnv("QUEUE_NAME", "parser_queue"),

@@ -7,7 +7,7 @@ import (
 
 type Plan interface {
 	Name() string
-	Domen() string
+	Domain() string
 	Match(url string) bool
 	Execute(task *task.Task) (*PlanResult, []FoundURL, error)
 }

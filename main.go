@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,11 +15,17 @@ import (
 	"go_parser/internal/queue"
 	"go_parser/internal/utils"
 	"go_parser/internal/worker"
+
+	"github.com/playwright-community/playwright-go"
 )
 
 func main() {
 	cfg := config.LoadConfig()
 	utils.Logger.Println("Конфигурация загружена.")
+
+	if err := playwright.Install(); err != nil {
+		log.Fatal("Ошибка установки playwright:", err)
+	}
 
 	ctx := context.Background()
 
@@ -28,12 +35,17 @@ func main() {
 		"records",
 	)
 
+	err := recordRepo.Connect(ctx)
+	if err != nil {
+		utils.Logger.Fatalf("Ошибка подключения к MongoDB: %v %s", err, cfg.MongoURI)
+	}
+
 	defer recordRepo.Close(ctx)
 
 	utils.Logger.Println("Подключение к RabbitMQ...")
 	rabbitMQConn, err := queue.ConnectToRabbitMQ(cfg.RabbitMQURI)
 	if err != nil {
-		utils.Logger.Fatalf("Ошибка подключения к RabbitMQ: %v", err)
+		utils.Logger.Fatalf("Ошибка подключения к RabbitMQ: %v %s", err, cfg.RabbitMQURI)
 	}
 	defer func() {
 		if err := rabbitMQConn.Close(); err != nil {
@@ -94,8 +106,13 @@ func main() {
 	utils.Logger.Println("Ожидание сообщений. Для выхода нажмите CTRL+C.")
 
 	h := handler.NewHandler(recordRepo, ch, cfg.QueueName)
+
 	pr := plans.NewRegistr()
+	pr.Register(plans.NewHackerNewsPlan())
+
 	wp := worker.NewWorkerPool(3, pr, h)
+
+	wp.Start()
 
 	go func() {
 		for msg := range msgs {

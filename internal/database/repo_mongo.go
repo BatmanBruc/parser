@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -54,6 +55,8 @@ func (r *MongoRepository[T]) Ping(ctx context.Context) error {
 }
 
 func (r *MongoRepository[T]) Create(ctx context.Context, entity T) error {
+	log.Printf("[DEBUG] Create called. Collection: %v", r.collection)
+	log.Printf("[DEBUG] Entity type: %T, value: %+v", entity, entity)
 	if entity.GetID() == "" {
 		entity.SetID(primitive.NewObjectID().Hex())
 	}
